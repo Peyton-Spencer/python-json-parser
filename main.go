@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,10 @@ import (
 
 type JsonMap map[string]map[string]any
 
+var replace_single_quotes = flag.Bool("replace-single-quote", false, "Set to true to replace single quotes with double quotes")
+
 func main() {
+	flag.Parse()
 	log.Logger = zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Caller().Logger()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
@@ -130,8 +134,10 @@ func extractJSONVariables(content string) (output JsonMap, err error) {
 					}
 				}
 				// otherwise, write the line
-				line := strings.TrimSpace(lines[j])
-				line = strings.ReplaceAll(line, "'", "\"")
+				line := lines[j]
+				if *replace_single_quotes {
+					line = strings.ReplaceAll(line, "'", "\"")
+				}
 				json_builder.WriteString(line)
 				j_log.Debug().Str("line", line).Msg("Line written")
 			}
