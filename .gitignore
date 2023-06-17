@@ -1,2 +1,2 @@
-data/input/*.py
-data/output/*.json
+input/*.py
+output/*.json

@@ -1,10 +1,11 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-json"
 
@@ -17,45 +18,51 @@ type JsonMap map[string]map[string]any
 
 func main() {
 	log.Logger = zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Caller().Logger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	pythonFilePath := flag.String("py", "", "Path to Python input file")
-	flag.Parse()
-	if *pythonFilePath == "" {
-		log.Error().Msg("Missing required arguments: -py")
-		return
+	// get python file paths
+	python_paths, err := filepath.Glob(filepath.Join("input", "*.py"))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error reading Python file")
 	}
-	{
-		// Read the Python file
-		pythonFilePath := *pythonFilePath
-		content, err := os.ReadFile(pythonFilePath)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error reading Python file")
-			return
-		}
 
-		// Extract JSON variables
-		jsonMap, err := extractJSONVariables(string(content))
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error extracting JSON variables")
-		}
+	var wg sync.WaitGroup
+	wg.Add(len(python_paths))
+	for _, pythonFilePath := range python_paths {
+		go func(pythonFilePath string) {
+			log := log.Logger.With().Str("filepath", pythonFilePath).Logger()
+			defer wg.Done()
+			// Read Python file
+			content, err := os.ReadFile(pythonFilePath)
+			if err != nil {
+				log.Fatal().Err(err).Msg("Error reading Python file")
+				return
+			}
 
-		// Write parsed output to JSON file
-		jsonData, err := json.MarshalIndent(&jsonMap, "", "  ")
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error marshaling JSON")
-			return
-		}
-		filepath := strings.Split(pythonFilePath, "/")
-		filename := filepath[len(filepath)-1]
-		jsonOutputFilePath := fmt.Sprintf("data/output/%s.json", strings.Split(filename, ".")[0])
+			// Extract JSON variables
+			jsonMap, err := extractJSONVariables(string(content))
+			if err != nil {
+				log.Fatal().Err(err).Msg("Error extracting JSON variables")
+			}
 
-		err = os.WriteFile(jsonOutputFilePath, jsonData, 0644)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error writing JSON output file")
-		}
-		log.Info().Str("filepath", jsonOutputFilePath).Msg("Parsed output written")
+			// Write parsed output to JSON file
+			jsonData, err := json.MarshalIndent(&jsonMap, "", "  ")
+			if err != nil {
+				log.Fatal().Err(err).Msg("Error marshaling JSON")
+				return
+			}
+			filepath := strings.Split(pythonFilePath, "/")
+			filename := filepath[len(filepath)-1]
+			jsonOutputFilePath := fmt.Sprintf("output/%s.json", strings.Split(filename, ".")[0])
+
+			err = os.WriteFile(jsonOutputFilePath, jsonData, 0644)
+			if err != nil {
+				log.Fatal().Err(err).Msg("Error writing JSON output file")
+			}
+			log.Info().Str("filepath", jsonOutputFilePath).Msg("Parsed output written")
+		}(pythonFilePath)
 	}
+	wg.Wait()
 }
 
 // Extracts JSON variables from Python file
